@@ -1,0 +1,39 @@
+import io
+import requests
+dfs=[]
+with open("C:/Users/Administrator/Desktop/JP/input.txt") as f:
+    # Read the station data from each url and parsing it. Load and parse UK Weather Station History data
+    for line in f:
+        station=" ".join(line.split())
+        url="https://www.metoffice.gov.uk/pub/data/weather/uk/climate/stationdata/{}data.txt".format(station)
+        hit_url=requests.get(url).text
+        requests.exceptions.RequestException as e:
+        df=pd.read_csv(io.StringIO(hit_url),sep='\t',skiprows=7,header=None,engine='python',skipinitialspace=True,names=["XX"])
+        df.replace('\#','',regex=True,inplace=True)
+        df.replace('\*','',regex=True,inplace=True)
+        df.replace('\---','0',regex=True,inplace=True)
+        searchfor = ['degC', 'Closed']
+        df=df[~df.XX.str.contains('|'.join(searchfor))]
+        df_fin=df["XX"].str.split("\s+",expand=True)
+        df_fin.insert(loc=0, column='Stations', value=station)
+        dfs.append(df_fin)
+# Combine all dataframes to a single dataframe with all station information. Combine all stations so can run queries across all stations and all time periods
+frame = pd.concat(dfs,sort=True)
+#Cleaning of finally loaded dataframe with all stations
+frame.dropna(axis=1, how='any', thresh=150,inplace=True)
+final_df=frame.drop(frame.columns[[8]],axis=1)
+final_df.columns =["station","yyyy","mm","tmax","tmin","af","rain","sun"]
+cols = ['yyyy', 'mm', 'tmax','tmin','af','rain','sun']
+# Converting columns to numeric
+final_df[cols] = final_df[cols].apply(pd.to_numeric, errors='coerce', axis=1)
+# When was the worse rainfall, or best sunshine for each station
+objd=final_df.sort_values(by='sun',na_position='first').groupby(['station']).tail(1)
+print(objd)
+#Rank stations by rainfall and / or sunshine
+objd['station_rank']=objd['sun'].rank(ascending=False)
+print(objd)
+#What are the averages for May across all stations, what was the best / worst year
+obje_stg=final_df.loc[final_df['mm'].isin(['5.0'])]
+obje_stg1=obje_stg.groupby(['yyyy', 'mm']).mean()
+obje=obje_stg1.sort_values(['sun','rain','af','tmax','tmin'],ascending=[True, True,True,True,True]).tail(1)
+print(obje)
